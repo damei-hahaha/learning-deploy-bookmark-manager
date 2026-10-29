@@ -6,7 +6,7 @@ import express from "express";
 import cors from "cors";
 
 import { getSettings } from "./config.js";
-import { errorHandler } from "./exceptions.js";
+import { errorHandler, notFoundHandler } from "./exceptions.js";
 import authRouter from "./routers/auth.js";
 import bookmarksRouter from "./routers/bookmarks.js";
 import categoriesRouter from "./routers/categories.js";
@@ -42,6 +42,7 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok", environment: settings.environment });
 });
 
+app.use(notFoundHandler);
 app.use(errorHandler);
 
 export default app;

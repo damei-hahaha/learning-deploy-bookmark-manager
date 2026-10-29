@@ -8,8 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 
 # The repo uses a single root package.json shared by all backends.
+# better-sqlite3 is a native addon used only by local SQLite development and
+# tests. Its install script downloads a prebuild and, on timeout, compiles with
+# node-gyp, which this slim image cannot do. This image talks to Postgres, so
+# skip install scripts and rebuild the ones the runtime actually needs: esbuild
+# (tsx) and the Prisma engines.
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts \
+ && npm rebuild esbuild @prisma/engines @prisma/client
 
 COPY backends/bookmark-manager ./backends/bookmark-manager
 

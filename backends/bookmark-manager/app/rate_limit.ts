@@ -5,6 +5,8 @@
 import rateLimit from "express-rate-limit";
 import type { RateLimitRequestHandler } from "express-rate-limit";
 
+import { sendError } from "./exceptions.js";
+
 function limit(maxPerMinute: number): RateLimitRequestHandler {
   return rateLimit({
     windowMs: 60 * 1000,
@@ -12,7 +14,10 @@ function limit(maxPerMinute: number): RateLimitRequestHandler {
     skipFailedRequests: true,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { detail: "Rate limit exceeded" },
+    statusCode: 429,
+    handler: (_req, res, _next, _options) => {
+      sendError(res, 429, "Rate limit exceeded", { code: "too_many_requests" });
+    },
   });
 }
 

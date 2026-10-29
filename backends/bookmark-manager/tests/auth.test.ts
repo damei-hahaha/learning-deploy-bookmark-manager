@@ -17,6 +17,11 @@ test("register short password rejected", async () => {
     .post("/auth/register")
     .send({ email: "x@example.com", username: "shorty", password: "short" });
   expect(res.status).toBe(422);
+  expect(res.body.error.status).toBe(422);
+  expect(res.body.error.code).toBe("validation_error");
+  expect(res.body.error.details).toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "password" })])
+  );
 });
 
 test("register invalid email rejected", async () => {
@@ -60,6 +65,13 @@ test("login wrong password", async () => {
     .type("form")
     .send({ username: "testuser", password: "wrongpassword" });
   expect(res.status).toBe(401);
+  expect(res.body).toEqual({
+    error: {
+      status: 401,
+      code: "invalid_credentials",
+      message: "Incorrect username or password",
+    },
+  });
 });
 
 test("login unknown user", async () => {
@@ -80,6 +92,32 @@ test("me with valid token", async () => {
 test("me without token", async () => {
   const res = await api().get("/auth/me");
   expect(res.status).toBe(401);
+  expect(res.body.error).toEqual({
+    status: 401,
+    code: "unauthorized",
+    message: "Could not validate credentials",
+  });
+});
+
+test("unknown route uses the error envelope", async () => {
+  const res = await api().get("/does-not-exist");
+  expect(res.status).toBe(404);
+  expect(res.body).toEqual({
+    error: { status: 404, code: "not_found", message: "Not found" },
+  });
+});
+
+test("malformed json uses the error envelope", async () => {
+  const res = await api()
+    .post("/auth/register")
+    .set("Content-Type", "application/json")
+    .send("{");
+  expect(res.status).toBe(400);
+  expect(res.body.error).toMatchObject({
+    status: 400,
+    code: "bad_request",
+    message: "Malformed JSON body",
+  });
 });
 
 test("me invalid token", async () => {

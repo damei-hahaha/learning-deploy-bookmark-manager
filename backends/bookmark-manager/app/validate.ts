@@ -1,16 +1,42 @@
 // Request-body validation middleware. Runs the body through a Zod schema; on
-// failure it returns 422 with the Zod issues.
+// failure it raises the same HttpError every other route uses, so the client
+// sees one error shape instead of a raw Zod issue list.
 
 import type { RequestHandler } from "express";
 
+import { HttpError } from "./exceptions.js";
+import type { FieldError } from "./exceptions.js";
 import type { AppRequest } from "./request.js";
 import type { ZodType, infer as ZodInfer } from "zod";
 
+function fieldErrors(issues: { path: PropertyKey[]; message: string }[]): FieldError[] {
+  return issues.map((issue) => ({
+    path: issue.path.map((part) => String(part)).join("."),
+    message: issue.message,
+  }));
+}
+
+// One string for `error.message`, the per-field list for `error.details`.
+// A form can fail two fields at once; joining them keeps a client that only
+// prints `message` from hiding the second one.
+function validationMessage(details: FieldError[]): string {
+  if (details.length === 0) return "Request validation failed";
+  return details
+    .map((detail) => (detail.path ? `${detail.path}: ${detail.message}` : detail.message))
+    .join("; ");
+}
+
 function validateBody(schema: ZodType): RequestHandler {
-  return (req, res, next) => {
+  return (req, _res, next) => {
     const result = schema.safeParse(req.body ?? {});
     if (!result.success) {
-      res.status(422).json({ detail: result.error.issues });
+      const details = fieldErrors(result.error.issues);
+      next(
+        new HttpError(422, validationMessage(details), null, {
+          code: "validation_error",
+          details,
+        })
+      );
       return;
     }
     // Express hands plain Requests to middleware; this is where the extra

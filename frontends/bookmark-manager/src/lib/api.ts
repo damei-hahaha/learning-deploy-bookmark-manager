@@ -22,17 +22,11 @@ export class ApiError extends Error {
 }
 
 function extractDetail(data: unknown, fallback: string): string {
-  if (typeof data === 'object' && data !== null && 'detail' in data) {
-    const detail = (data as { detail: unknown }).detail
-    if (typeof detail === 'string') return detail
-    if (Array.isArray(detail) && detail.length > 0) {
-      const first = detail[0]
-      if (typeof first === 'object' && first && 'msg' in first) {
-        return String((first as { msg: unknown }).msg)
-      }
-    }
-  }
-  return fallback
+  if (typeof data !== 'object' || data === null || !('error' in data)) return fallback
+  const error = (data as { error: unknown }).error
+  if (typeof error !== 'object' || error === null || !('message' in error)) return fallback
+  const message = (error as { message: unknown }).message
+  return typeof message === 'string' && message.length > 0 ? message : fallback
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

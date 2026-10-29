@@ -22,6 +22,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: bookmark_manager
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -50,6 +52,9 @@ services:
       - "8002:8000" # matches API_URL = 'http://localhost:8002' in the frontend
     environment:
       <<: *app-env
+    volumes:
+      # Login lines are appended to logs/login.log inside the container.
+      - ./logs:/app/backends/bookmark-manager/logs
     depends_on:
       db:
         condition: service_healthy

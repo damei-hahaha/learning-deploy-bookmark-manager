@@ -13,7 +13,7 @@ import {
 import { HttpError, asyncHandler } from "../exceptions.js";
 import { limit } from "../rate_limit.js";
 import { getRedis } from "../redis_client.js";
-import { makeLogger } from "../logging_config.js";
+import { loginLogPath, makeLogger, makePinoLogger } from "../logging_config.js";
 import { validateBody, validatedBody } from "../validate.js";
 import { userCreate } from "../schemas/user.js";
 import { userPublic, tokenResponse } from "../schemas/serializers.js";
@@ -25,6 +25,12 @@ import {
 
 const router = express.Router();
 const logger = makeLogger("app.routers.auth");
+// Login records fields (who, why, status) instead of a sentence. The same line
+// goes to stdout and to logs/login.log. The password is never passed in;
+// redact on the logger is the backstop if a later edit logs the body.
+const loginLog = makePinoLogger("app.routers.auth", { file: loginLogPath }).child({
+  route: "POST /auth/token",
+});
 
 router.post(
   "/register",
@@ -51,30 +57,42 @@ router.post(
 // OAuth2 password flow: the token endpoint reads form-encoded username/password.
 router.post(
   "/token",
-  limit(10),
+  limit(15),
   asyncHandler(async (req, res) => {
     // This route deliberately skips validateBody, so the body is whatever the
     // client sent. Reading it as optional fields keeps that honest.
     const body: unknown = req.body ?? {};
-    const { username, password } = body as { username?: string; password?: string };
-    const credentialsError = new HttpError(401, "Incorrect username or password", {
-      "WWW-Authenticate": "Bearer",
-    });
+    const record = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+    const username = typeof record.username === "string" ? record.username : "";
+    const password = typeof record.password === "string" ? record.password : "";
+    const credentialsError = new HttpError(
+      401,
+      "Incorrect username or password",
+      { "WWW-Authenticate": "Bearer" },
+      { code: "invalid_credentials" }
+    );
     if (!username) {
-      logger.warning("Failed login attempt with no username");
+      loginLog.warn({ event: "login_failed", reason: "missing_username", status: 401 });
       throw credentialsError;
     }
     const user = await prisma.user.findUnique({ where: { username } });
-    if (!user || !verifyPassword(password || "", user.passwordHash)) {
-      logger.warning(`Failed login attempt for username: ${username}`);
+    if (!user || !verifyPassword(password, user.passwordHash)) {
+      loginLog.warn({ event: "login_failed", reason: "invalid_credentials", username, status: 401 });
       throw credentialsError;
     }
     if (!user.isActive) {
-      throw new HttpError(400, "Inactive user");
+      loginLog.warn({
+        event: "login_failed",
+        reason: "inactive_user",
+        username: user.username,
+        user_id: user.id,
+        status: 400,
+      });
+      throw new HttpError(400, "Inactive user", null, { code: "inactive_user" });
     }
 
     const token = createAccessToken(user.username);
-    logger.info(`Issued token for user: ${user.username}`);
+    loginLog.info({ event: "login_succeeded", username: user.username, user_id: user.id, status: 200 });
     res.json(tokenResponse(token));
   })
 );

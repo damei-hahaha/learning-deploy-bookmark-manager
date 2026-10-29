@@ -35,11 +35,17 @@ test("create bookmark invalid url", async () => {
   const { headers } = await defaultUser();
   const res = await api().post("/bookmarks/").set(headers).send({ url: "not-a-url" });
   expect(res.status).toBe(422);
+  expect(res.body.error.code).toBe("validation_error");
+  expect(res.body.error.details).toEqual(
+    expect.arrayContaining([expect.objectContaining({ path: "url" })])
+  );
 });
 
 test("create bookmark without auth", async () => {
   const res = await api().post("/bookmarks/").send({ url: "https://example.com" });
   expect(res.status).toBe(401);
+  expect(res.body.error.code).toBe("unauthorized");
+  expect(res.body.error.status).toBe(401);
 });
 
 test("list bookmarks isolated per user", async () => {
