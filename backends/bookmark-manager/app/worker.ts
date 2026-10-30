@@ -27,12 +27,13 @@ const flushWorker = new Worker(CLICK_FLUSH_QUEUE, async () => flushBookmarkClick
   connection,
 });
 
-// Schedule the flush every 10 minutes (cron: every-10th-minute).
+// Schedule the flush every 10 minutes. BullMQ 6 uses a job scheduler instead of
+// the removed `repeat` option on queue.add(). Upsert is idempotent by id.
 const flushQueue = new Queue(CLICK_FLUSH_QUEUE, { connection });
-void flushQueue.add(
-  "flush",
-  {},
-  { repeat: { pattern: "*/10 * * * *" }, removeOnComplete: true }
+void flushQueue.upsertJobScheduler(
+  "flush-clicks",
+  { pattern: "*/10 * * * *" },
+  { name: "flush", data: {}, opts: { removeOnComplete: true } }
 );
 
 for (const worker of [metadataWorker, flushWorker]) {
