@@ -1,0 +1,28 @@
+FROM node:22-slim
+
+WORKDIR /app
+
+# Prisma's query engine links against OpenSSL, which node:22-slim does not ship.
+# Without it Prisma warns on every start and falls back to guessing a version.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# The repo uses a single root package.json shared by all backends.
+# better-sqlite3 is a native addon used only by local SQLite development and
+# tests. Its install script downloads a prebuild and, on timeout, compiles with
+# node-gyp, which this slim image cannot do. This image talks to Postgres, so
+# skip install scripts and rebuild the ones the runtime actually needs: esbuild
+# (tsx) and the Prisma engines.
+COPY package*.json ./
+RUN npm ci --ignore-scripts \
+ && npm rebuild esbuild @prisma/engines @prisma/client
+
+COPY backends/bookmark-manager ./backends/bookmark-manager
+
+WORKDIR /app/backends/bookmark-manager
+# This image is only ever run by docker-compose.yml, which supplies a Postgres
+# DATABASE_URL, so the client is generated from the Postgres schema. The
+# SQLite schema next to it is what local development and the test suite use.
+RUN npx prisma generate --schema=prisma/postgres/schema.prisma
+
+CMD ["npx", "tsx", "app/server.ts"]

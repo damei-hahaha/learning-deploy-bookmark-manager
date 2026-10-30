@@ -24,3 +24,5 @@ coverage/
 # Local SQLite databases
 *.db
 *.db-journal
+.neon
+.env.local
